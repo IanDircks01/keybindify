@@ -1,0 +1,22 @@
+{
+  "name": "keybindify",
+  "version": "1.0.0",
+  "description": "minimal spotify with keybinds",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "keybindify"
+  },
+  "author": "Ian Dircks",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "electron": "^29.1.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

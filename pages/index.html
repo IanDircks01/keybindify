@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Playback Window</title>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="./styles.css">
+</head>
+<body>
+  <div class="content-area">
+    <p style="font-size: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;"><b>Bulls On Parade</b> - Rage Against The Machine</p>
+    <span style="display: flex; width: 50%; margin: 5px auto 5px auto; justify-content: space-between;">
+      <a id="shuffle" class="interactable disabled">
+        <img src="../assets/media-shuffle.svg" class="filter-mauve interactable" height="25px" alt="shuffle" />
+      </a>
+      <a id="previous" class="interactable">
+        <img src="../assets/media-backward.svg" class="filter-mauve" height="25px" alt="previous" />
+      </a>
+      <a id="pause-play" class="interactable">
+        <img id="pause" src="../assets/media-pause.svg" class="filter-mauve" style="display: block;" height="25px" alt="pause" />
+        <img id="play" src="../assets/media-play.svg" class="filter-mauve" style="display: none;" height="25px" alt="play" />
+      </a>
+      <a id="forward" class="interactable">
+        <img src="../assets/media-forward.svg" class="filter-mauve" height="25px" alt="next" />
+      </a>
+      <a id="repeat" class="interactable disabled">
+        <img src="../assets/media-repeat.svg" class="filter-mauve" height="25px" alt="repeat" />
+      </a>
+    </span>
+    <span style="display: flex; font-size: 12px;">
+      <p>00:00/99:99</p>
+      <p>---------------</p>
+      <p>100% volume</p>
+    </span>
+  </div>
+  <script src="../scripts/player.js"></script>
+</body>
+</html>

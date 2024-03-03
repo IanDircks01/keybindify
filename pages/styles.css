@@ -1,0 +1,43 @@
+@media (prefers-color-scheme: dark) {
+    body { background: #1e1e2e; color: #cdd6f4; }
+}
+
+@media (prefers-color-scheme: light) {
+    body { background: #eff1f5; color: #4c4f69; }
+}
+
+.content-area {
+    font-family: "Roboto", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+
+}
+
+.content-area p {
+    margin: 0; 
+    padding: 0;
+}
+
+img {
+    margin: 5px;
+}
+
+.filter-mauve {
+    filter: invert(71%) sepia(14%) saturate(1013%) hue-rotate(223deg) brightness(96%) contrast(102%);
+}
+
+.interactable {
+    border-radius: 15%;
+}
+
+.interactable :hover {
+    background-color: #a6adc8;
+}
+
+.interactable :active {
+    background-color: #45475a;
+}
+
+.disabled {
+    opacity: 50%;
+}
