@@ -41,3 +41,13 @@ img {
 .disabled {
     opacity: 50%;
 }
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+    cursor: pointer;
+}
