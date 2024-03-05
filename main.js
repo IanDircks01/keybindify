@@ -1,16 +1,17 @@
-const { app, Tray, Menu, nativeImage, BrowserWindow, globalShortcut, screen, ipcMain, nativeTheme } = require('electron')
+const { app, Tray, Menu, nativeImage, BrowserWindow, globalShortcut, screen, ipcMain, nativeTheme, dialog } = require('electron')
 const express = require('express')
+const axios = require('axios')
 const Store = require('electron-store')
 const querystring = require("querystring")
+const path = require('node:path')
 require('dotenv').config()
 
 const store = new Store()
-
 var expressApp = express()
 
 expressApp.get('/login', (req, res) => {
   var state = generateRandomString(16)
-  var scope = 'user-read-private user-read-email'
+  var scope = 'user-modify-playback-state user-read-currently-playing user-read-playback-state'
 
   res.redirect('https://accounts.spotify.com/authorize?' +
   querystring.stringify({
@@ -29,19 +30,30 @@ expressApp.get('/callback', (req, res) => {
   if (state === null) {
     res.redirect('/#' + querystring.stringify({ error: 'state_mismatch' }))
   } else {
-    var authOptions = {
-      url: 'https://accounts.spotify.com/api/token',
-      form: {
-        code: code,
-        redirect_uri: process.env.REDIRECT_URL,
-        grant_type: 'authorization_code'
-      },
+    axios.post('https://accounts.spotify.com/api/token', {
+      code: code,
+      redirect_uri: process.env.REDIRECT_URL,
+      grant_type: 'authorization_code'
+    }, {
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
         'Authorization': 'Basic ' + (new Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'))
-      },
-      json: true
-    };
+      }
+    }).then((response) => {
+      if (response.status == 200) {
+        store.set('refreshToken', response.data.refresh_token)
+        store.set('accessToken', {
+          expire: Date.now() + (response.data.expires_in * 1000),
+          token: response.data.access_token
+        })
+        res.send(response.data)
+      } else {
+        res.send("Unable to get auth", 402)
+      }
+    }).catch((error) => {
+      console.log(error)
+      res.send(error, 500)
+    })
   }
 });
 
@@ -53,10 +65,48 @@ const generateRandomString = (length) => {
 
 let tray
 let playerWindow = undefined
+let searchWindow = undefined
 
-const path = require('node:path')
+const getAuthorizationToken = async () => {
+  const tokenInfo = store.get('accessToken')
+  if (!tokenInfo) {
+    await authenticateUser()
+  } else {
+    if (tokenInfo?.expire < Date.now()) {
+      dialog.showMessageBox("REQUESTING NEW TOKEN")
+      store.delete('refreshToken')
+      store.delete('accessToken')
+      await refreshAccessToken()
+    }
+  }
 
-let authorization = store.get('token')
+  return store.get('accessToken')
+}
+
+const refreshAccessToken = () => {
+  axios.post('https://accounts.spotify.com/api/token', {
+    grant_type: 'refresh_token',
+    refresh_token: store.get('refreshToken')
+  }, {
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'Authorization': 'Basic ' + (new Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'))
+    }
+  }).then((response) => {
+    if (response.status == 200) {
+      store.set('refreshToken', response.data.refresh_token)
+      store.set('accessToken', {
+        expire: Date.now() + response.data.expires_in,
+        token: response.data.access_token
+      })
+    } else {
+      dialog.showErrorBox("Request Error", "Unable to refresh token")
+    }
+  }).catch((error) => {
+    console.log(error)
+    dialog.showErrorBox("Token Error", error.toString())
+  })
+}
 
 const togglePlayerWindow = () => {
   if (playerWindow === undefined) {
@@ -70,26 +120,13 @@ const togglePlayerWindow = () => {
       y: workArea.height - 100, 
       resizable: false, 
       roundedCorners: false,
+      alwaysOnTop: true,
       webPreferences: {
         preload: path.join(__dirname, '/scripts/playerBridge.js')
-      },
-      alwaysOnTop: true
+      }
     })
 
     playerWindow.loadFile('./pages/player.html')
-
-    ipcMain.handle('dark-mode:toggle', () => {
-      if (nativeTheme.shouldUseDarkColors) {
-        nativeTheme.themeSource = 'light'
-      } else {
-        nativeTheme.themeSource = 'dark'
-      }
-      return nativeTheme.shouldUseDarkColors
-    })
-  
-    ipcMain.handle('dark-mode:system', () => {
-      nativeTheme.themeSource = 'system'
-    })
   }
 
   if (playerWindow.isVisible()) {
@@ -99,7 +136,32 @@ const togglePlayerWindow = () => {
   }
 }
 
-const authenticateUser = () => {
+const toggleSearchWindow = () => {
+  if (searchWindow === undefined) {
+    searchWindow = new BrowserWindow({
+      width: 800,
+      height: 50,
+      show: false,
+      frame: false,
+      resizable: false,
+      roundedCorners: false,
+      alwaysOnTop: true,
+      webPreferences: {
+        preload: path.join(__dirname, '/scripts/searchBridge.js')
+      }
+    })
+
+    searchWindow.loadFile('./pages/search.html')
+  }
+
+  if (searchWindow.isVisible()) {
+    searchWindow.hide()
+  } else {
+    searchWindow.show()
+  }
+}
+
+const authenticateUser = async () => {
   const loginWindow = new BrowserWindow({
     height: 800,
     width: 800,
@@ -112,7 +174,7 @@ const authenticateUser = () => {
   loginWindow.loadURL('http://localhost:3000/login');
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
     const icon = nativeImage.createFromPath('./assets/icon.png')
     tray = new Tray(icon)
 
@@ -120,16 +182,159 @@ app.whenReady().then(() => {
       { label: "Exit", click: () => { app.quit() } }
     ])
 
+    ipcMain.handle('searchForSong', async (event, args) => {
+      dialog.showErrorBox("INFO", args.toString())
+      toggleSearchWindow()
+      return undefined
+    })
+
+    ipcMain.handle('getPlayerState', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.get('https://api.spotify.com/v1/me/player?market=US', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 200) {
+        return res.data
+      } else if (res.status == 204) {
+        return undefined
+      } else {
+        dialog.showErrorBox("ERROR", "UNABLE TO GET SONG INFO")
+      }
+    })
+
+    ipcMain.handle('seekToPosition', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.put(`https://api.spotify.com/v1/me/player/seek?position_ms=${args}`, undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('setRepeatState', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.put(`https://api.spotify.com/v1/me/player/repeat?state=${args}`, undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('setShuffleState', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.put(`https://api.spotify.com/v1/me/player/shuffle?state=${args}`, undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('setVolumeState', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.put(`https://api.spotify.com/v1/me/player/volume?volume_percent=${args}`, undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('pausePlayback', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.put("https://api.spotify.com/v1/me/player/pause", undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('resumePlayback', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.put("https://api.spotify.com/v1/me/player/play", {
+        "position_ms": 0
+      }, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('skipToNext', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.post("https://api.spotify.com/v1/me/player/next", undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('skipToPrevious', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.post("https://api.spotify.com/v1/me/player/previous", undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 204) {
+        return "ok"
+      } else {
+        return undefined
+      }
+    })
+
     tray.setToolTip("Keybindify")
     tray.setContextMenu(contextMenu)
 
     globalShortcut.register('Alt+CommandOrControl+F9', () => togglePlayerWindow())
+    globalShortcut.register('Alt+CommandOrControl+F10', () => toggleSearchWindow())
 
-    if (authorization === undefined) {
-      authenticateUser()
-    } else {
-      togglePlayerWindow()
-    }
+    getAuthorizationToken()
+    toggleSearchWindow()//togglePlayerWindow()
 })
 
 expressApp.listen(process.env.PORT, () => {
