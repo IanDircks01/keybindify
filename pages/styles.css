@@ -22,10 +22,16 @@ img {
     margin: 5px;
 }
 
-.song-input {
-    color: red;
-    margin: 0;
-    padding: 0;
+textarea:focus, input:focus{
+    outline: none;
+}
+
+#searchTerm {
+    color: #cdd6f4;
+    background-color: #1e1e2e;
+    font-weight: 600;
+    font-size: 15px;
+    border: none;
     height: 100%;
 }
 

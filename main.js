@@ -73,7 +73,6 @@ const getAuthorizationToken = async () => {
     await authenticateUser()
   } else {
     if (tokenInfo?.expire < Date.now()) {
-      dialog.showMessageBox("REQUESTING NEW TOKEN")
       store.delete('refreshToken')
       store.delete('accessToken')
       await refreshAccessToken()
@@ -99,12 +98,9 @@ const refreshAccessToken = () => {
         expire: Date.now() + response.data.expires_in,
         token: response.data.access_token
       })
-    } else {
-      dialog.showErrorBox("Request Error", "Unable to refresh token")
     }
   }).catch((error) => {
     console.log(error)
-    dialog.showErrorBox("Token Error", error.toString())
   })
 }
 
@@ -140,7 +136,7 @@ const toggleSearchWindow = () => {
   if (searchWindow === undefined) {
     searchWindow = new BrowserWindow({
       width: 800,
-      height: 50,
+      height: 60,
       show: false,
       frame: false,
       resizable: false,
@@ -149,6 +145,10 @@ const toggleSearchWindow = () => {
       webPreferences: {
         preload: path.join(__dirname, '/scripts/searchBridge.js')
       }
+    })
+
+    searchWindow.on('show', () => {
+      searchWindow.webContents.executeJavaScript('focusSearch()')
     })
 
     searchWindow.loadFile('./pages/search.html')
@@ -183,9 +183,35 @@ app.whenReady().then(async () => {
     ])
 
     ipcMain.handle('searchForSong', async (event, args) => {
-      dialog.showErrorBox("INFO", args.toString())
-      toggleSearchWindow()
-      return undefined
+      const { expire, token } = await getAuthorizationToken()
+      const res = await axios.get(`https://api.spotify.com/v1/search?q=${args}&type=track&market=US`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 200) {
+        return res.data.tracks.items
+      } else if (res.status == 204) {
+        return undefined
+      }
+    })
+
+    ipcMain.handle('addSongToQueue', async (event, args) => {
+      const { expire, token } = await getAuthorizationToken()
+
+      const link = args.replaceAll(":", "%3A")
+
+      const res = await axios.post(`https://api.spotify.com/v1/me/player/queue?uri=${link}`, undefined, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+
+      if (res.status == 200 || res.status == 204) {
+        toggleSearchWindow()
+        return undefined
+      }
     })
 
     ipcMain.handle('getPlayerState', async (event, args) => {
@@ -200,8 +226,6 @@ app.whenReady().then(async () => {
         return res.data
       } else if (res.status == 204) {
         return undefined
-      } else {
-        dialog.showErrorBox("ERROR", "UNABLE TO GET SONG INFO")
       }
     })
 
@@ -333,8 +357,9 @@ app.whenReady().then(async () => {
     globalShortcut.register('Alt+CommandOrControl+F9', () => togglePlayerWindow())
     globalShortcut.register('Alt+CommandOrControl+F10', () => toggleSearchWindow())
 
-    getAuthorizationToken()
-    toggleSearchWindow()//togglePlayerWindow()
+    getAuthorizationToken().then((data) => {
+      togglePlayerWindow()
+    })
 })
 
 expressApp.listen(process.env.PORT, () => {
