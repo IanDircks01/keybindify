@@ -8,6 +8,7 @@ require('dotenv').config()
 
 const store = new Store()
 var expressApp = express()
+store.clear()
 
 expressApp.get('/login', (req, res) => {
   var state = generateRandomString(16)
@@ -23,14 +24,14 @@ expressApp.get('/login', (req, res) => {
   }))
 })
 
-expressApp.get('/callback', (req, res) => {
+expressApp.get('/callback', async (req, res) => {
   var code = req.query.code || null
   var state = req.query.state || null
 
   if (state === null) {
     res.redirect('/#' + querystring.stringify({ error: 'state_mismatch' }))
   } else {
-    axios.post('https://accounts.spotify.com/api/token', {
+    let authRes = await axios.post('https://accounts.spotify.com/api/token', {
       code: code,
       redirect_uri: process.env.REDIRECT_URL,
       grant_type: 'authorization_code'
@@ -39,21 +40,19 @@ expressApp.get('/callback', (req, res) => {
         'content-type': 'application/x-www-form-urlencoded',
         'Authorization': 'Basic ' + (new Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'))
       }
-    }).then((response) => {
-      if (response.status == 200) {
-        store.set('refreshToken', response.data.refresh_token)
-        store.set('accessToken', {
-          expire: Date.now() + (response.data.expires_in * 1000),
-          token: response.data.access_token
-        })
-        res.send(response.data)
-      } else {
-        res.send("Unable to get auth", 402)
-      }
-    }).catch((error) => {
-      console.log(error)
-      res.send(error, 500)
     })
+
+    if (authRes.status == 200) {
+      store.set('refreshToken', authRes.data.refresh_token)
+      store.set('accessToken', {
+        expire: Date.now() + (authRes.data.expires_in * 1000),
+        token: authRes.data.access_token
+      })
+      res.send()
+      //loginWindow.destroy()
+    } else {
+      res.status(402).send("Unable to get auth")
+    }
   }
 });
 
@@ -66,6 +65,7 @@ const generateRandomString = (length) => {
 let tray
 let playerWindow = undefined
 let searchWindow = undefined
+let loginWindow = undefined
 
 const getAuthorizationToken = async () => {
   const tokenInfo = store.get('accessToken')
@@ -73,8 +73,8 @@ const getAuthorizationToken = async () => {
     await authenticateUser()
   } else {
     if (tokenInfo?.expire < Date.now()) {
-      store.delete('refreshToken')
-      store.delete('accessToken')
+      // store.delete('refreshToken')
+      // store.delete('accessToken')
       await refreshAccessToken()
     }
   }
@@ -82,8 +82,8 @@ const getAuthorizationToken = async () => {
   return store.get('accessToken')
 }
 
-const refreshAccessToken = () => {
-  axios.post('https://accounts.spotify.com/api/token', {
+const refreshAccessToken = async () => {
+  let authRes = await axios.post('https://accounts.spotify.com/api/token', {
     grant_type: 'refresh_token',
     refresh_token: store.get('refreshToken')
   }, {
@@ -91,16 +91,12 @@ const refreshAccessToken = () => {
       'content-type': 'application/x-www-form-urlencoded',
       'Authorization': 'Basic ' + (new Buffer.from(process.env.CLIENT_ID + ':' + process.env.CLIENT_SECRET).toString('base64'))
     }
-  }).then((response) => {
-    if (response.status == 200) {
-      store.set('refreshToken', response.data.refresh_token)
-      store.set('accessToken', {
-        expire: Date.now() + response.data.expires_in,
-        token: response.data.access_token
-      })
-    }
-  }).catch((error) => {
-    console.log(error)
+  })
+
+  store.set('refreshToken', authRes.data.refresh_token)
+  store.set('accessToken', {
+    expire: Date.now() + authRes.data.expires_in,
+    token: authRes.data.access_token
   })
 }
 
@@ -117,6 +113,7 @@ const togglePlayerWindow = () => {
       resizable: false, 
       roundedCorners: false,
       alwaysOnTop: true,
+      skipTaskbar: true,
       webPreferences: {
         preload: path.join(__dirname, '/scripts/playerBridge.js')
       }
@@ -162,16 +159,13 @@ const toggleSearchWindow = () => {
 }
 
 const authenticateUser = async () => {
-  const loginWindow = new BrowserWindow({
+  loginWindow = new BrowserWindow({
     height: 800,
     width: 800,
-    Menu: null,
-    webPreferences: {
-      preload: path.join(__dirname, '/scripts/authBridge.js')
-    }
+    Menu: null
   })
 
-  loginWindow.loadURL('http://localhost:3000/login');
+  await loginWindow.loadURL('http://localhost:3000/login');
 }
 
 app.whenReady().then(async () => {
@@ -200,9 +194,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('addSongToQueue', async (event, args) => {
       const { expire, token } = await getAuthorizationToken()
 
-      const link = args.replaceAll(":", "%3A")
-
-      const res = await axios.post(`https://api.spotify.com/v1/me/player/queue?uri=${link}`, undefined, {
+      const res = await axios.post(`https://api.spotify.com/v1/me/player/queue?uri=${args}`, undefined, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -212,6 +204,10 @@ app.whenReady().then(async () => {
         toggleSearchWindow()
         return undefined
       }
+    })
+
+    ipcMain.handle('resizeSearchWindow', async (event, height, width) => {
+      searchWindow.setSize(height, width);
     })
 
     ipcMain.handle('getPlayerState', async (event, args) => {
