@@ -26,6 +26,25 @@ textarea:focus, input:focus{
     outline: none;
 }
 
+.device-btn {
+    width: 75%;
+    margin: auto;
+    padding: 15px;
+    font-weight: 600;
+    color: #cdd6f4;
+    background-color: #181825;
+    border: solid #11111b 2px;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.device-btn:hover {
+    background-color: #11111b;
+    -webkit-transition: background-color 250ms linear;
+    -ms-transition: background-color 250ms linear;
+    transition: background-color 250ms linear;
+}
+
 #searchTerm {
     color: #cdd6f4;
     background-color: #1e1e2e;
@@ -59,8 +78,10 @@ textarea:focus, input:focus{
     -webkit-appearance: none;
     appearance: none;
     cursor: pointer;
+    background: #cba6f7;
 }
 
 .slider::-moz-range-thumb {
     cursor: pointer;
+    background: #cba6f7;
 }

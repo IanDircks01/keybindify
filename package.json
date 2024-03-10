@@ -4,8 +4,10 @@
   "description": "minimal spotify with keybinds",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "electron-forge start",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
   },
   "repository": {
     "type": "git",
@@ -14,13 +16,22 @@
   "author": "Ian Dircks",
   "license": "GPL-3.0",
   "devDependencies": {
-    "electron": "^29.1.0"
+    "@electron-forge/cli": "^7.3.0",
+    "@electron-forge/maker-deb": "^7.3.0",
+    "@electron-forge/maker-rpm": "^7.3.0",
+    "@electron-forge/maker-squirrel": "^7.3.0",
+    "@electron-forge/maker-zip": "^7.3.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.3.0",
+    "electron": "github:castlabs/electron-releases#v29.1.1+wvcus"
   },
   "dependencies": {
+    "@electron-forge/plugin-fuses": "^7.3.0",
     "axios": "^1.6.7",
     "dotenv": "^16.4.5",
+    "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
     "express": "^4.18.3",
+    "pubsub-js": "^1.9.4",
     "querystring": "^0.2.1"
   }
 }

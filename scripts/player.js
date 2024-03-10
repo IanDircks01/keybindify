@@ -3,10 +3,18 @@ let isPlaying = false
 let muted = false
 let repeat = false
 let shuffle = false
+let loved = false
 let volume = 0
 let duration = 0
 
+let currentSongID = undefined
+
 let songLength = 0
+
+let devices = undefined
+
+const loveElement = document.getElementById('love')
+const deviceElement = document.getElementById('device')
 
 const pauseElement = document.getElementById('pause')
 const playElement = document.getElementById('play')
@@ -26,6 +34,8 @@ const highSpeaker = document.getElementById('volumeHigh')
 
 const playbackSlider = document.getElementById('song')
 const volumeSlider = document.getElementById('volume')
+
+let player = undefined
 
 const millisToMinutesAndSeconds = (millis) => {
     var minutes = Math.floor(millis / 60000);
@@ -67,6 +77,18 @@ const syncRepeat = () => {
     }
 }
 
+const syncLove = () => {
+    if (loved) {
+        if (loveElement.classList.contains('disabled')) {
+            loveElement.classList.remove('disabled')
+        }
+    } else {
+        if (!loveElement.classList.contains('disabled')) {
+            loveElement.classList.add('disabled')
+        }
+    }
+}
+
 const syncDuration = () => {
     playbackSlider.value = duration
 }
@@ -92,37 +114,46 @@ const syncVolume = () => {
     }
 }
 
-const syncPlayerState = () => {
-    window.electronAPI.getPlayerState().then((data) => {
-        if (data != undefined) {
-            console.log(data)
-            const song = data.item
-            const device = data.device
-    
-            isPlaying = data.is_playing
-            syncPausePlay()
+const syncPlayerState = async () => {
+    const data = await window.electronAPI.getPlayerState()
 
-            repeat = data.repeat_state != "off"
-            shuffle = data.shuffle_state
+    if (data != undefined) {
+        const song = data.item
+        const device = data.device
 
-            syncRepeat()
-            syncShuffle()
-
-            songTitle.innerHTML = `<b>${song.name}</b> - ${song.artists.map(item => item.name).toString()}`
-    
-            songLength = song.duration_ms
-
-            totalTime.innerText = millisToMinutesAndSeconds(song.duration_ms)
-            timeElapsed.innerText = millisToMinutesAndSeconds(data.progress_ms)
-            duration = (data.progress_ms / song.duration_ms) * 100
-            syncDuration()
-    
-            volume = device.volume_percent
-            syncVolume()
-        } else {
-            songTitle.innerText = "Not Playing"
+        if (data.item.id != currentSongID) {
+            currentSongID = data.item.id
+            await newSongStarted()
         }
-    })
+
+        isPlaying = data.is_playing
+        syncPausePlay()
+
+        repeat = data.repeat_state != "off"
+        shuffle = data.shuffle_state
+
+        syncRepeat()
+        syncShuffle()
+
+        songTitle.innerHTML = `<b>${song.name}</b> - ${song.artists.map(item => item.name).toString()}`
+
+        songLength = song.duration_ms
+
+        totalTime.innerText = millisToMinutesAndSeconds(song.duration_ms)
+        timeElapsed.innerText = millisToMinutesAndSeconds(data.progress_ms)
+        duration = (data.progress_ms / song.duration_ms) * 100
+        syncDuration()
+
+        volume = device.volume_percent
+        syncVolume()
+    } else {
+        songTitle.innerText = "Not Playing"
+    }
+}
+
+const newSongStarted = async () => {
+    loved = await window.electronAPI.checkLove(currentSongID)
+    syncLove()
 }
 
 document.getElementById('volumeControl').addEventListener('click', async () => {
@@ -149,6 +180,21 @@ volumeSlider.addEventListener('change', async () => {
     volume = volumeSlider.value
     syncVolume()
     window.electronAPI.setVolumeState(volume)
+})
+
+loveElement.addEventListener('click', async () => {
+    if (loved) {
+        window.electronAPI.unloveTrack(currentSongID)
+    } else {
+        window.electronAPI.loveTrack(currentSongID)
+    }
+
+    loved = !loved
+    syncLove()
+})
+
+deviceElement.addEventListener('click', async () => {
+    window.electronAPI.showDeviceChooser()
 })
 
 document.getElementById('shuffle').addEventListener('click', async () => {
@@ -181,10 +227,50 @@ document.getElementById('repeat').addEventListener('click', async () => {
     window.electronAPI.setRepeatState(repeat ? "track" : "off")
 })
 
-window.addEventListener('load', () => {
-    syncPlayerState()
+window.addEventListener('load', async () => {
+    await syncPlayerState()
+    devices = await window.electronAPI.getDevices()
 
     const playInterval = setInterval(() => {
         syncPlayerState()
     }, 1000)
+})
+
+window.onSpotifyWebPlaybackSDKReady = async () => {
+    let { expire, token } = await window.electronAPI.getAccessToken()
+
+    player = new Spotify.Player({
+        name: 'Keybindify',
+        getOAuthToken: cb => { cb(token) },
+        volume: volume
+    })
+
+    // Ready
+    player.addListener('ready', ({ device_id }) => {
+        console.log('Ready with Device ID', device_id)
+    });
+
+    // Not Ready
+    player.addListener('not_ready', ({ device_id }) => {
+        console.log('Device ID has gone offline', device_id)
+    })
+
+    player.addListener('initialization_error', ({ message }) => {
+        console.error(message)
+    })
+
+    player.addListener('authentication_error', ({ message }) => {
+        console.error(message)
+    })
+
+    player.addListener('account_error', ({ message }) => {
+        console.error(message)
+    })
+
+    player.connect()
+    
+}
+
+window.addEventListener('beforeunload', (event) => {
+    player.disconnect()
 })

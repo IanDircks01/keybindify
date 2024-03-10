@@ -12,7 +12,10 @@
 <body>
   <div class="content-area">
     <p id="songTitle" style="font-size: 15px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;"><b>no song is playing</b></p>
-    <span style="display: flex; width: 50%; margin: 2px auto 2px auto; justify-content: space-between;">
+    <span style="display: flex; width: 65%; margin: 2px auto 2px auto; justify-content: space-between;">
+      <a id="love" class="interactable disabled">
+        <img src="../assets/thumbs-up.svg" class="filter-mauve interactable" height="25px" alt="shuffle" />
+      </a>
       <a id="shuffle" class="interactable disabled">
         <img src="../assets/media-shuffle.svg" class="filter-mauve interactable" height="25px" alt="shuffle" />
       </a>
@@ -29,6 +32,9 @@
       <a id="repeat" class="interactable disabled">
         <img src="../assets/media-repeat.svg" class="filter-mauve" height="25px" alt="repeat" />
       </a>
+      <a id="device" class="interactable">
+        <img src="../assets/device-desktop.svg" class="filter-mauve interactable" height="25px" alt="shuffle" />
+      </a>
     </span>
     <span style="display: flex; margin: 0 auto 0 auto; padding: 0; font-size: 12px;">
       <p id="time" style="margin: auto 0 auto 0;">00:00</p>
@@ -40,9 +46,10 @@
         <img id="volumeMedium" src="../assets/speaker-wave-1.svg" class="filter-mauve" style="display: none;" height="15px" alt="volumeMedium" />
         <img id="volumeHigh" src="../assets/speaker-wave-2.svg" class="filter-mauve" style="display: none;" height="15px" alt="volumeHigh" />
       </a>
-      <input type="range" min="0" max="100" value="0" style="width: 20%;" class="slider" id="volume">
+      <input type="range" min="0" max="100" value="0" style="width: 20%; background-color: #cba6f7;" class="slider" id="volume">
     </span>
   </div>
+  <script src="../scripts/spotify-player.js"></script>
   <script src="../scripts/player.js"></script>
 </body>
 </html>
